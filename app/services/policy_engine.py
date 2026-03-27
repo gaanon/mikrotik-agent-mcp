@@ -25,6 +25,83 @@ _TOOL_ACTION_TYPES: dict[str, ActionType] = {
     "list_firewall_rules": ActionType.READ,
     "create_firewall_rule": ActionType.WRITE,
     "delete_firewall_rule": ActionType.DESTRUCTIVE,
+
+    # System tools (Extend MikroTik Tool Suite)
+    "get_system_info":       ActionType.READ,
+    "get_system_identity":   ActionType.READ,
+    "get_system_health":     ActionType.READ,
+    "get_system_uptime":     ActionType.READ,
+    "get_system_clock":      ActionType.READ,
+    "list_logs":             ActionType.READ,
+    "export_config":         ActionType.READ,
+
+    "set_system_identity":   ActionType.WRITE,
+    "set_system_clock":      ActionType.WRITE,
+    "create_system_backup":  ActionType.WRITE,
+
+    "reboot_router":         ActionType.DESTRUCTIVE,
+    "shutdown_router":       ActionType.DESTRUCTIVE,
+    "restore_system_backup": ActionType.DESTRUCTIVE,
+    "import_config":         ActionType.DESTRUCTIVE,
+    "clear_logs":            ActionType.DESTRUCTIVE,
+
+    # Interfaces tools
+    "get_interface_details": ActionType.READ,
+    "get_interface_stats":   ActionType.READ,
+    "monitor_interface":     ActionType.READ,
+
+    "enable_interface":      ActionType.WRITE,
+    "disable_interface":     ActionType.WRITE,
+    "create_interface":      ActionType.WRITE,
+    "rename_interface":      ActionType.WRITE,
+    "set_interface_comment": ActionType.WRITE,
+    "set_interface_mtu":     ActionType.WRITE,
+
+    "delete_interface":      ActionType.DESTRUCTIVE,
+
+    # IP address tools
+    "list_ip_addresses":     ActionType.READ,
+    "get_ip_address":        ActionType.READ,
+
+    "add_ip_address":        ActionType.WRITE,
+    "update_ip_address":     ActionType.WRITE,
+
+    "delete_ip_address":     ActionType.DESTRUCTIVE,
+
+    # Wireguard VPN tools
+    "list_wireguard_peers":                ActionType.READ,
+    "generate_wireguard_keypair":          ActionType.READ,
+    "generate_wireguard_client_config":    ActionType.READ,
+
+    "create_wireguard_interface":          ActionType.WRITE,
+    "add_wireguard_peer":                  ActionType.WRITE,
+    "assign_ip_to_wireguard_interface":    ActionType.WRITE,
+    "allow_wireguard_port":                ActionType.WRITE,
+    "setup_wireguard_server":              ActionType.WRITE,
+    "add_wireguard_client":                ActionType.WRITE,
+
+    # Routing tools
+    "list_routes":    ActionType.READ,
+    "get_route":      ActionType.READ,
+
+    "add_route":      ActionType.WRITE,
+    "update_route":   ActionType.WRITE,
+    "enable_route":   ActionType.WRITE,
+    "disable_route":  ActionType.WRITE,
+
+    "delete_route":   ActionType.DESTRUCTIVE,
+
+    # NAT tools
+    "list_nat_rules":   ActionType.READ,
+    "get_nat_rule":     ActionType.READ,
+
+    "create_nat_rule":  ActionType.WRITE,
+    "update_nat_rule":  ActionType.WRITE,
+    "enable_nat_rule":  ActionType.WRITE,
+    "disable_nat_rule": ActionType.WRITE,
+    "move_nat_rule":    ActionType.WRITE,
+
+    "delete_nat_rule":  ActionType.DESTRUCTIVE,
 }
 
 

@@ -150,3 +150,159 @@ Prepare interfaces for:
   * Validate via policy engine
   * Execute via MikroTik client (mocked if needed)
 * Code runs without syntax errors
+
+# Frontend
+
+# Goal
+
+Build a Chainlit frontend for an AI-powered MikroTik assistant that communicates with an existing FastAPI backend.
+
+# Context
+
+* The backend already exists and exposes:
+  POST /chat
+
+* Request format:
+  {
+  "message": "string",
+  "confirm": optional bool
+  }
+
+* Response format:
+  {
+  "status": "success | requires_confirmation | error",
+  "message": "string",
+  "data": optional object
+  }
+
+* The backend handles:
+
+  * LLM reasoning
+  * MCP tool execution
+  * Policy engine
+
+The frontend should ONLY handle:
+
+* chat UI
+* sending user input
+* displaying responses
+* handling confirmation flows
+
+# Requirements
+
+## 1. Project structure
+
+Create a simple Chainlit app:
+
+* `chainlit_app.py`
+* `.env` (for backend URL if needed)
+* `requirements.txt`
+
+## 2. Basic Chat UI
+
+Use Chainlit decorators:
+
+* @cl.on_chat_start
+* @cl.on_message
+
+On chat start:
+
+* Send a welcome message:
+  "Welcome to your MikroTik AI assistant. You can ask me to manage your router, configure VPNs, or improve security."
+
+## 3. Backend integration
+
+* Use `httpx` (async) to call backend
+* Backend URL configurable via env variable:
+  BACKEND_URL=http://localhost:8000
+
+## 4. Message flow
+
+When user sends a message:
+
+1. Send POST request to /chat
+2. Pass:
+   {
+   "message": user_input
+   }
+3. Display backend response
+
+## 5. Confirmation handling (CRITICAL)
+
+If backend returns:
+{
+"status": "requires_confirmation",
+"message": "..."
+}
+
+Then:
+
+* Show message to user
+
+* Ask:
+  "Do you want to proceed?"
+
+* Add two buttons:
+
+  * ✅ Confirm
+  * ❌ Cancel
+
+If user clicks Confirm:
+
+* resend request with:
+  {
+  "message": original_message,
+  "confirm": true
+  }
+
+If Cancel:
+
+* respond:
+  "Action cancelled."
+
+## 6. Chat history
+
+* Maintain session state
+* Store last user message (for confirmation flow)
+
+## 7. Error handling
+
+* Display friendly error messages
+* Handle backend timeouts
+
+## 8. UX improvements
+
+* Show loading indicator while waiting
+* Format JSON responses nicely
+* Highlight actions (e.g. firewall rule created)
+
+## 9. Optional (bonus)
+
+* Add quick action buttons:
+
+  * "Secure my router"
+  * "Set up VPN"
+  * "Show firewall rules"
+
+## 10. Constraints
+
+* Use async/await everywhere
+* Clean, readable code
+* Add comments explaining logic
+* No hardcoded URLs
+
+# Output format
+
+* Provide full working `chainlit_app.py`
+* Include requirements.txt
+* Include instructions to run:
+  chainlit run chainlit_app.py -w
+
+# Completion criteria
+
+* User can:
+
+  * send message via UI
+  * backend responds correctly
+  * confirmation flow works with buttons
+  * app runs locally without errors
