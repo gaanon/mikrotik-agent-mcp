@@ -7,3 +7,4 @@ pydantic-settings
 httpx
 python-dotenv
 cryptography
+chainlit

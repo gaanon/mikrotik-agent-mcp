@@ -656,6 +656,45 @@ class MikroTikClient:
             self._raise_for_status(response)
             return response.json()
 
+    def get_wireguard_interface(self, name: str) -> dict:
+        """Get details of a specific WireGuard interface (contains public-key)."""
+        if self._dry_run:
+            return {"name": name, "public-key": "DRY-RUN-PUB-KEY", "listen-port": "51820"}
+        
+        logger.info("MikroTik: GET /interface/wireguard?name=%s", name)
+        with self._client() as client:
+            response = client.get(f"/interface/wireguard?name={name}")
+            self._raise_for_status(response)
+            data = response.json()
+            if not data:
+                raise MikroTikAPIError(404, f"WireGuard interface '{name}' not found")
+            return data[0] if isinstance(data, list) else data
+
+    def find_wan_ip(self) -> str | None:
+        """Attempt to find the router's WAN IP for endpoint discovery."""
+        if self._dry_run:
+            return "1.2.3.4"
+        
+        # Strategy 1: check interfaces with 'wan' in name
+        ifaces = self.get_interfaces()
+        wan_ifaces = [i["name"] for i in ifaces if "wan" in i["name"].lower() or i.get("default-name") == "ether1"]
+        
+        # Strategy 2: check IP addresses on those interfaces
+        ips = self.list_ip_addresses()
+        for iface in wan_ifaces:
+            for addr in ips:
+                if addr.get("interface") == iface:
+                    # Return the address without /mask
+                    return addr.get("address", "").split("/")[0]
+        
+        # Strategy 3: return first non-local IP address found
+        for addr in ips:
+            raw_ip = addr.get("address", "").split("/")[0]
+            if raw_ip and not raw_ip.startswith(("192.168.", "10.", "172.16.")):
+                 return raw_ip
+                 
+        return None
+
     # ------------------------------------------------------------------
     # Routing APIs
     # ------------------------------------------------------------------

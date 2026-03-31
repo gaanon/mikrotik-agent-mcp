@@ -588,6 +588,8 @@ TOOL_SCHEMAS: list[dict] = [
             "name": "add_wireguard_client",
             "description": (
                 "Register a WireGuard peer and optionally return a client .conf file. "
+                "This tool is proactive: if you omit server details (interface, public key, endpoint, IP), "
+                "the agent will automatically find them on the router for you. "
                 "Two workflows: "
                 "(1) App-generated keys — omit client_public_key; the app generates a keypair and returns a "
                 "ready-to-import .conf (use for devices that don't manage their own keys). "
@@ -598,22 +600,22 @@ TOOL_SCHEMAS: list[dict] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "server_interface": {"type": "string", "description": "Name of the server's WireGuard interface (e.g. 'wg0')"},
-                    "server_public_key": {"type": "string", "description": "Server's base64-encoded public key"},
-                    "client_name": {"type": "string", "description": "Descriptive name/comment for this peer"},
-                    "client_address": {"type": "string", "description": "VPN address for client (e.g. '10.0.0.2/32')"},
-                    "server_endpoint": {"type": "string", "description": "Server public endpoint in host:port format (e.g. '1.2.3.4:51820')"},
+                    "client_name": {"type": "string", "description": "Descriptive name/comment for this peer (e.g. 'Laptop')"},
+                    "server_interface": {"type": "string", "description": "WireGuard interface name (default: auto-find first available)"},
+                    "server_public_key": {"type": "string", "description": "Server's public key (default: auto-fetch from interface)"},
+                    "client_address": {"type": "string", "description": "VPN address for client (default: auto-allocate next free IP)"},
+                    "server_endpoint": {"type": "string", "description": "Server public endpoint IP:port (default: auto-find WAN IP)"},
                     "dns_servers": {"type": "string", "description": "Comma-separated DNS servers for the .conf file (optional)"},
                     "client_public_key": {
                         "type": "string",
                         "description": (
-                            "Existing base64 public key from the device (e.g. copied from the WireGuard app). "
-                            "When provided, skips keypair generation and does NOT return a .conf — "
-                            "the device already holds its private key. Omit to let the app generate keys."
+                            "Existing base64 public key from the device. "
+                            "When provided, skips key generation and does NOT return a .conf. "
+                            "Omit to let the app generate keys."
                         ),
                     },
                 },
-                "required": ["server_interface", "server_public_key", "client_name", "client_address", "server_endpoint"],
+                "required": ["client_name"],
             },
         },
     },

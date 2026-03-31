@@ -17,6 +17,9 @@ from mcp.server.fastmcp import FastMCP
 from app.services import mikrotik_client as _mk
 from app.services import policy_engine
 from app.models.schemas import FirewallRule
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 # FastMCP server instance — mounted into the FastAPI app in main.py
 mcp = FastMCP("mikrotik-agent")
@@ -631,55 +634,113 @@ def setup_wireguard_server(
 
 @mcp.tool()
 def add_wireguard_client(
-    server_interface: str,
-    server_public_key: str,
     client_name: str,
-    client_address: str,
-    server_endpoint: str,
+    server_interface: str | None = None,
+    server_public_key: str | None = None,
+    client_address: str | None = None,
+    server_endpoint: str | None = None,
     dns_servers: str | None = None,
     client_public_key: str | None = None,
 ) -> dict:
     """Complete Wireguard client setup: register peer and return client configuration.
 
-    Supports two workflows:
-      - App-generated keys (default): generates a keypair, registers the peer, and
-        returns a ready-to-import .conf file. Use when the app manages keys.
-      - Device-generated keys: supply the device's existing public key via
-        client_public_key. The peer is registered with that key and no .conf is
-        generated (the device already has its private key). Use for phones/devices
-        that generate their own keys (e.g. the WireGuard app on Android/iOS).
-
-    Orchestrates:
-      1. Generates a new keypair (skipped if client_public_key is provided)
-      2. Registers the client as a peer on the server interface
-      3. Generates a ready-to-use .conf file (skipped if client_public_key is provided)
+    This tool is "proactive" — if you omit server details, it will attempt to:
+    1. Find an existing WireGuard interface.
+    2. Retrieve the server's public key.
+    3. Find the router's WAN IP for the endpoint.
+    4. Allocate the next available IP address in the VPN subnet.
 
     Args:
-        server_interface:   Name of the server's Wireguard interface.
-        server_public_key:  Server's base64-encoded public key.
-        client_name:        Descriptive name/comment for the peer.
-        client_address:     VPN address for client (e.g. '10.0.0.2/32').
-        server_endpoint:    Server public endpoint in host:port format (e.g. '1.2.3.4:51820').
-        dns_servers:        Comma-separated DNS servers for the .conf (optional).
-        client_public_key:  Existing base64 public key from the device. When provided,
-                            the app skips key generation and does NOT return a .conf —
-                            the device already holds its private key.
+        client_name:        Descriptive name/comment for the peer (e.g. 'Laptop').
+        server_interface:   WireGuard interface name (default: auto-find first).
+        server_public_key:  Server's public key (default: auto-fetch from interface).
+        client_address:     VPN address for client (default: auto-find next free IP).
+        server_endpoint:    Server public IP:port (default: auto-find WAN IP).
+        dns_servers:        Comma-separated DNS servers (optional).
+        client_public_key:  Existing public key from device (optional, skips keygen).
     """
     policy_engine.evaluate("add_wireguard_client")
 
+    # 1. Proactive discovery for server_interface
+    if not server_interface:
+        ifaces = _mk.mikrotik_client.get_interfaces()
+        wg_ifaces = [i["name"] for i in ifaces if i.get("type") == "wireguard"]
+        if not wg_ifaces:
+            raise ValueError("No WireGuard interface found on router. Please create one first.")
+        server_interface = wg_ifaces[0]
+        logger.info("Auto-discovered server_interface: %s", server_interface)
+
+    # 2. Proactive discovery for server_public_key
+    if not server_public_key:
+        wg_details = _mk.mikrotik_client.get_wireguard_interface(server_interface)
+        server_public_key = wg_details.get("public-key")
+        if not server_public_key:
+            raise ValueError(f"Could not retrieve public-key for interface {server_interface}")
+        logger.info("Auto-discovered server_public_key")
+
+    # 3. Proactive discovery for client_address (find next available IP)
+    if not client_address:
+        # Find the IP currently assigned to the WG interface
+        ips = _mk.mikrotik_client.list_ip_addresses()
+        wg_ip_entry = next((i for i in ips if i.get("interface") == server_interface), None)
+        if not wg_ip_entry:
+             raise ValueError(f"No IP address found on WireGuard interface {server_interface}")
+        
+        # Calculate next IP
+        server_iface_ip = ipaddress.ip_interface(wg_ip_entry["address"])
+        network = server_iface_ip.network
+        
+        # Find all existing client IPs in this subnet
+        peers = _mk.mikrotik_client.list_wireguard_peers()
+        existing_ips = set()
+        for p in peers:
+            if p.get("interface") == server_interface:
+                try:
+                    # peer's allowed-address usually contains the client IP
+                    peer_addr = p.get("allowed-address", "").split(",")[0].split("/")[0]
+                    if peer_addr:
+                        existing_ips.add(ipaddress.ip_address(peer_addr))
+                except Exception:
+                    continue
+        
+        # Add the server's own IP to used set
+        existing_ips.add(server_iface_ip.ip)
+        
+        # Iterate over usable hosts (skipping network and broadcast)
+        found_ip = None
+        for host in network.hosts():
+            if host not in existing_ips:
+                found_ip = f"{host}/32"
+                break
+        
+        if not found_ip:
+            raise ValueError(f"No free IP addresses found in subnet {network}")
+        client_address = found_ip
+        logger.info("Auto-discovered client_address: %s", client_address)
+
+    # 4. Proactive discovery for server_endpoint
+    if not server_endpoint:
+        wan_ip = _mk.mikrotik_client.find_wan_ip()
+        if not wan_ip:
+             raise ValueError("Could not auto-discover WAN IP. Please provide server_endpoint.")
+        
+        # Port discovery
+        wg_details = _mk.mikrotik_client.get_wireguard_interface(server_interface)
+        port = wg_details.get("listen-port", 51820)
+        server_endpoint = f"{wan_ip}:{port}"
+        logger.info("Auto-discovered server_endpoint: %s", server_endpoint)
+
+    # --- Standard logic continues ---
     device_generated_keys = client_public_key is not None
 
     if device_generated_keys:
-        # Use the key provided by the device — no keypair generation needed
         resolved_public_key = client_public_key
         client_private_key = None
     else:
-        # Step 1: Generate keypair for client
         keypair = generate_wireguard_keypair()
         client_private_key = keypair["private_key"]
         resolved_public_key = keypair["public_key"]
 
-    # Step 2: Register the peer on the server
     peer_result = _mk.mikrotik_client.add_wireguard_peer(
         interface=server_interface,
         public_key=resolved_public_key,
@@ -687,7 +748,6 @@ def add_wireguard_client(
         comment=client_name,
     )
 
-    # Step 3: Generate client config (only when the app generated the keys)
     if device_generated_keys:
         return {
             "status": "client_setup_complete",
@@ -695,10 +755,7 @@ def add_wireguard_client(
             "client_public_key": resolved_public_key,
             "peer_result": peer_result,
             "config": None,
-            "note": (
-                "Peer registered using device-provided public key. "
-                "No .conf generated — the device already holds its private key."
-            ),
+            "note": "Peer registered using device-provided public key.",
         }
 
     config_result = generate_wireguard_client_config(
@@ -716,6 +773,11 @@ def add_wireguard_client(
         "client_public_key": resolved_public_key,
         "peer_result": peer_result,
         "config": config_result["config"],
+        "discovery_summary": {
+            "server_interface": server_interface,
+            "client_address": client_address,
+            "server_endpoint": server_endpoint
+        }
     }
 
 # ---------------------------------------------------------------------------
